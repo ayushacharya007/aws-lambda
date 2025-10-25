@@ -1,0 +1,101 @@
+from aws_cdk import (
+    Stack,
+    Duration,
+    RemovalPolicy,
+    aws_s3 as s3,
+    aws_s3_deployment as s3_deploy,
+    aws_s3_notifications as s3n,
+    aws_lambda as _lambda,
+    aws_lambda_event_sources as lambda_event_source,
+    aws_sqs as sqs,
+)
+from constructs import Construct
+import os
+from typing import cast
+
+
+class S3SqsLambdaStack(Stack):
+    """CDK stack that wires S3 -> SQS -> Lambda for object processing.
+
+    - Creates an S3 bucket with server-side encryption, versioning and
+      automatic object deletion on stack destroy (for dev/test).
+    - Creates an SQS queue to receive S3 notifications.
+    - Creates a Lambda function (with awswrangler layer) that consumes messages
+      from the queue and has read/write access to the bucket.
+    """
+
+    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+        super().__init__(scope, construct_id, **kwargs)
+
+        # Create a dead letter queue for failed messages
+        dlq = sqs.Queue(self, "DemoDeadLetterQueue",
+                        queue_name="s3-sqs-lambda-dlq",
+                        removal_policy=RemovalPolicy.DESTROY
+                        )
+
+        # Create an SQS queue used to buffer S3 notifications for the Lambda.
+        queue = sqs.Queue(self, "DemoQueue",
+                          queue_name="s3-sqs-lambda-queue",
+                          visibility_timeout=Duration.seconds(500),
+                          dead_letter_queue=sqs.DeadLetterQueue(
+                              max_receive_count=1,
+                              queue=dlq
+                          ),
+                          # In dev/test, remove the queue when the stack is destroyed.
+                          removal_policy=RemovalPolicy.DESTROY,
+                          )
+
+        # Create the S3 bucket that will trigger notifications.
+        bucket = s3.Bucket(self, "MyTestBucket",
+                           bucket_name=f's3-sqs-test-{os.getenv("BUCKET_NAME")}',
+                           encryption=s3.BucketEncryption.S3_MANAGED,
+                           removal_policy=RemovalPolicy.DESTROY,
+                           auto_delete_objects=True,
+                           block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+                           enforce_ssl=True,
+                           versioned= False
+                           )
+        
+        # Configure the bucket to send notifications to the SQS queue
+        bucket.add_event_notification(
+            s3.EventType.OBJECT_CREATED, # e.g., when an object is created
+            cast(s3.IBucketNotificationDestination,s3n.SqsDestination(queue=cast(sqs.IQueue, queue))), # the SQS queue as the destination
+            s3.NotificationKeyFilter(prefix="Raw/", suffix=".csv") # optional: filter for specific object key prefix and suffix
+        )
+
+        # Deploy local resources into the bucket at deploy time.
+        s3_deploy.BucketDeployment(self, "RawSources",
+                                   sources=[s3_deploy.Source.asset("../resources")],
+                                   destination_bucket=bucket,
+                                   destination_key_prefix="Raw"
+                                   )
+
+        # Lambda layer providing awswrangler (or other libraries) to the function.
+        wrangler_layer = _lambda.LayerVersion.from_layer_version_arn(self, "AwsWranglerLayer",
+                                                                     layer_version_arn="arn:aws:lambda:ap-southeast-2:336392948345:layer:AWSSDKPandas-Python313-Arm64:4"
+                                                                     )
+
+        # Lambda function that will process S3 object events.
+        transform_fn = _lambda.Function(self, "FileTransformLambda",
+                                        runtime=_lambda.Runtime.PYTHON_3_13,
+                                        handler="sqs_lambda.handler",
+                                        code=_lambda.Code.from_asset("src/lambdas"),
+                                        layers=[wrangler_layer],
+                                        architecture=_lambda.Architecture.ARM_64,
+                                        timeout=Duration.seconds(500),
+                                        memory_size=512,
+                                        )
+
+        # Allow the Lambda to consume messages from the queue (Receive/Delete/ChangeVisibility).
+        queue.grant_consume_messages(transform_fn)
+        
+        # Grant the Lambda function read/write permissions to the bucket.
+        bucket.grant_read_write(transform_fn)
+        
+        # Configure the Lambda to be triggered by messages in the SQS queue.
+        transform_fn.add_event_source(
+            lambda_event_source.SqsEventSource(
+                queue=queue,
+                batch_size=1
+            )
+        )

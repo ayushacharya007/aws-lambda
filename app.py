@@ -3,26 +3,20 @@ import os
 
 import aws_cdk as cdk
 
-from s3_lambda.s3_lambda_stack import S3LambdaStack
+from stacks.s3_sqs_lambda_stack import S3SqsLambdaStack
+from stacks.s3_sns_lambda_stack import S3SnsLambdaStack
+from stacks.event_bridge_lambda_stack import EventBridgeLambdaStack
+from stacks.glue_lambda_stack import GlueLambdaStack
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 app = cdk.App()
-S3LambdaStack(app, "S3LambdaStack",
-    # If you don't specify 'env', this stack will be environment-agnostic.
-    # Account/Region-dependent features and context lookups will not work,
-    # but a single synthesized template can be deployed anywhere.
-
-    # Uncomment the next line to specialize this stack for the AWS Account
-    # and Region that are implied by the current CLI configuration.
-
-    #env=cdk.Environment(account=os.getenv('CDK_DEFAULT_ACCOUNT'), region=os.getenv('CDK_DEFAULT_REGION')),
-
-    # Uncomment the next line if you know exactly what Account and Region you
-    # want to deploy the stack to. */
-
-    #env=cdk.Environment(account='123456789012', region='us-east-1'),
-
-    # For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html
-    )
+S3SqsLambdaStack(app, "S3LambdaStack")
+S3SnsLambdaStack(app, "S3SnsLambdaStack")
+EventBridgeLambdaStack(app, "EventBridgeLambdaStack")
+GlueLambdaStack(app, "GlueLambdaStack")
 
 app.synth()
