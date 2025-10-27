@@ -3,16 +3,14 @@ from aws_cdk import (
     Duration,
     RemovalPolicy,
     aws_s3 as s3,
-    aws_s3_deployment as s3_deploy,
     aws_lambda as _lambda,
     aws_events as events,
     aws_events_targets as targets,
     aws_sqs as sqs,
-    # aws_iam as iam,
 )
+import aws_cdk as cdk
 from constructs import Construct
-from typing import cast
-import os
+
 
 
 class EventBridgeLambdaStack(Stack):
@@ -29,7 +27,7 @@ class EventBridgeLambdaStack(Stack):
 
         # Create the S3 bucket that will trigger notifications.
         source_bucket = s3.Bucket(self, "SourceBucket",
-                           bucket_name=f's3-event-bridge-source-{os.getenv("BUCKET_NAME")}',
+                           bucket_name=f's3-event-bridge-source-{cdk.Aws.ACCOUNT_ID}-{cdk.Aws.REGION}',
                            versioned=False,
                            encryption=s3.BucketEncryption.S3_MANAGED,
                            removal_policy=RemovalPolicy.DESTROY,
@@ -41,7 +39,7 @@ class EventBridgeLambdaStack(Stack):
         
         # Create a destination bucket to store processed files
         destination_bucket = s3.Bucket(self, "ProcessedBucket",
-                           bucket_name=f's3-event-bridge-processed-{os.getenv("BUCKET_NAME")}',
+                           bucket_name=f's3-event-bridge-processed-{cdk.Aws.ACCOUNT_ID}-{cdk.Aws.REGION}',
                            versioned=False,
                            encryption=s3.BucketEncryption.S3_MANAGED,
                            removal_policy=RemovalPolicy.DESTROY,
@@ -85,7 +83,7 @@ class EventBridgeLambdaStack(Stack):
                               timeout=Duration.seconds(300),
                               memory_size=512,
                               environment={
-                                    "DESTINATION_BUCKET_NAME": f's3-event-bridge-processed-{os.getenv("BUCKET_NAME")}'
+                                    "DESTINATION_BUCKET_NAME": f's3-event-bridge-processed-{cdk.Aws.ACCOUNT_ID}-{cdk.Aws.REGION}'
                                 }
                               )
         
@@ -96,21 +94,15 @@ class EventBridgeLambdaStack(Stack):
                         )  
         
         # Add Lambda function as target with proper type handling
-        lambda_target = targets.LambdaFunction(
-            handler=cast(_lambda.IFunction, fn),
+        rule.add_target(
+            targets.LambdaFunction( # type: ignore
+            handler=fn, # type: ignore
             dead_letter_queue=dlq,
             max_event_age=Duration.hours(1),
             retry_attempts=2
+            )
         )
-        rule.add_target(cast(events.IRuleTarget, lambda_target))
 
         # Grant the Lambda function read/write permissions on the S3 buckets.
         source_bucket.grant_read(fn)
         destination_bucket.grant_read_write(fn)
-
-        # # Deploy local resources into the bucket at deploy time.
-        # s3_deploy.BucketDeployment(self, "RawSources",
-        #                            sources=[s3_deploy.Source.asset("../resources")],
-        #                            destination_bucket=source_bucket,
-        #                            destination_key_prefix="Raw"
-        #                            )

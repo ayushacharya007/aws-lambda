@@ -12,3 +12,5 @@ notebooks/
 json/
 venv/
 .DS_Store
+central_stack.py
+sql/

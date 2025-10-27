@@ -53,11 +53,11 @@ class S3SnsLambdaStack(Stack):
         
         # Configure the bucket to send notifications to the SNS topic
         bucket.add_event_notification(
-            s3.EventType.OBJECT_CREATED, # e.g., when an object is created
-            cast(s3.IBucketNotificationDestination,s3n.SnsDestination(topic=cast(sns.ITopic, topic))), # the SNS topic as the destination
-            s3.NotificationKeyFilter(prefix="Raw/", suffix=".csv") # optional: filter for specific object key prefix and suffix
+            s3.EventType.OBJECT_CREATED,
+            s3n.SnsDestination(topic=topic),  # type: ignore
+            s3.NotificationKeyFilter(prefix="Raw/", suffix=".csv")
         )
-        
+
         # # Deploy local resources into the bucket at deploy time.
         s3_deploy.BucketDeployment(self, "RawSources",
                                    sources=[s3_deploy.Source.asset("../resources")],
@@ -82,8 +82,8 @@ class S3SnsLambdaStack(Stack):
                               )
 
         # Subscribe the Lambda function to the SNS topic with a DLQ.
-        topic.add_subscription(sns_subs.LambdaSubscription(cast(_lambda.IFunction, fn), dead_letter_queue=dlq)) 
-        
+        topic.add_subscription(sns_subs.LambdaSubscription(fn, dead_letter_queue=dlq)) # type: ignore
+
         # Or alternatively, add the event source directly to the Lambda function.
         # Uncomment the following line and comment out the above subscription to use this method.
         

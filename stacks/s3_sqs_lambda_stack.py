@@ -41,7 +41,6 @@ class S3SqsLambdaStack(Stack):
                               max_receive_count=1,
                               queue=dlq
                           ),
-                          # In dev/test, remove the queue when the stack is destroyed.
                           removal_policy=RemovalPolicy.DESTROY,
                           )
 
@@ -53,14 +52,13 @@ class S3SqsLambdaStack(Stack):
                            auto_delete_objects=True,
                            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
                            enforce_ssl=True,
-                           versioned= False
                            )
         
         # Configure the bucket to send notifications to the SQS queue
         bucket.add_event_notification(
-            s3.EventType.OBJECT_CREATED, # e.g., when an object is created
-            cast(s3.IBucketNotificationDestination,s3n.SqsDestination(queue=cast(sqs.IQueue, queue))), # the SQS queue as the destination
-            s3.NotificationKeyFilter(prefix="Raw/", suffix=".csv") # optional: filter for specific object key prefix and suffix
+            s3.EventType.OBJECT_CREATED,
+            s3n.SqsDestination(queue=queue), # type: ignore
+            s3.NotificationKeyFilter(prefix="Raw/", suffix=".csv")
         )
 
         # Deploy local resources into the bucket at deploy time.
