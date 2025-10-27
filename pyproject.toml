@@ -1,0 +1,11 @@
+[project]
+name = "aws-lambda"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "aws-cdk-lib>=2.221.0",
+    "constructs>=10.4.2",
+    "python-dotenv>=1.2.1",
+]
