@@ -3,62 +3,69 @@ import json
 import os
 
 def handler(event, context):
+    """
+    Handler for EventBridge S3 events.
+    Processes S3 objects by reading CSV, cleaning data, and saving as Parquet.
     
+    Event structure (from EventBridge):
+    {
+        "detail-type": "Object Created",
+        "source": "aws.s3",
+        "detail": {
+            "bucket": {"name": "bucket-name"},
+            "object": {"key": "object-key", "size": 123, ...}
+        }
+    }
+    """
     try:
-        print(f"Lambda started. Processing {len(event['Records'])} EventBridge records")
-
+        print("Lambda started...")
         print(f"Event: {event}")
-        print(f"Context: {context}")
 
-        print("Processing EventBridge records...")
-        for record in event['Records']:
-            print("Parsing EventBridge message body...")
-            print(f"EventBridge Record: {record}")
-            # Parse the EventBridge message body which contains the S3 notification
-            message_body = json.loads(record['body'])
-            
-            print(f"Parsed message body: {message_body}")
-            
-            # Extract S3 event records from the parsed message
-            for s3_record in message_body['Records']:
-                
-                print(f"S3 Record: {s3_record}")
-                bucket = s3_record['s3']['bucket']['name']
-                key = s3_record['s3']['object']['key']
-                
-                s3_path = f"s3://{bucket}/{key}"
-                print(f"Processing file: {s3_path}")
-                
-                # Read the CSV file from S3
-                print("Reading CSV from S3...")
-                df = wr.s3.read_csv(
-                    s3_path,
-                    usecols=['show_id', 'type', 'title', 'director', 'cast', 'country', 'release_year', 'rating']
-                )
-                print(f"CSV read successfully. Data shape: {df.shape}")
-            
-                
-                print("Cleaning data...")
-                df.drop_duplicates(inplace=True)
-                df.dropna(inplace=True)  
-                print(f"Data cleaned. Final shape: {df.shape}")
-                print(f"Successfully processed files: {s3_path}")
+        # Extract bucket and key from EventBridge event
+        detail = event.get('detail', {})
+        bucket = detail.get('bucket', {}).get('name')
+        key = detail.get('object', {}).get('key')
+        
+        if not bucket or not key:
+            print("Error: Missing bucket or key in event")
+            return {
+                'statusCode': 400,
+                'body': 'Missing bucket or key in event',
+            }
 
-                output_path = f"s3://{bucket}/Transformed/{os.path.basename(key.split('.')[0])}.parquet"
-                print(f"Writing to S3: {output_path}")
+        s3_path = f"s3://{bucket}/{key}"
+        print(f"Processing file: {s3_path}")
+        
+        # Read the CSV file from S3
+        print("Reading CSV from S3...")
+        df = wr.s3.read_csv(
+            s3_path,
+            usecols=['show_id', 'type', 'title', 'director', 'cast', 'country', 'release_year', 'rating']
+        )
+        print(f"CSV read successfully. Data shape: {df.shape}")
+    
+        # Clean data
+        print("Cleaning data...")
+        df.drop_duplicates(inplace=True)
+        df.dropna(inplace=True)  
+        print(f"Data cleaned. Final shape: {df.shape}")
 
-                wr.s3.to_parquet(
-                    df,
-                    path=output_path,
-                )
+        # Write cleaned data to Parquet
+        file_name = os.path.basename(key).split('.')[0]
+        DESTINATION_BUCKET_NAME = os.getenv("DESTINATION_BUCKET_NAME")
+        output_path = f"s3://{DESTINATION_BUCKET_NAME}/Transformed/{file_name}.parquet"
+        print(f"Writing to S3: {output_path}")
+
+        wr.s3.to_parquet(
+            df,
+            path=output_path,
+        )
+        
+        print(f"Successfully wrote file to: {output_path}")
                 
-                print(f"Successfully wrote file to: {output_path}")
-                
-                
-        print("All records processed successfully")
         return {
             'statusCode': 200,
-            'body': f'Successfully transformed and saved {len(event["Records"])} file(s)'
+            'body': f'Successfully transformed and saved file: {key}',
         }
             
     except Exception as e:
