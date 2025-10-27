@@ -7,14 +7,9 @@ from aws_cdk import (
     aws_s3 as s3,
     aws_iam as iam,
 )
-
+import aws_cdk as cdk
 from constructs import Construct
 from dotenv import load_dotenv
-import os
-
-from s3_lambda.src.lambdas import glue_lambda
-
-load_dotenv(dotenv_path="../.env")
 
 class GlueLambdaStack(Stack):
     """CDK stack that creates a Lambda function to interact with AWS Glue.
@@ -28,7 +23,7 @@ class GlueLambdaStack(Stack):
         
         # Create an S3 bucket to store Glue-related data
         result_bucket = s3.Bucket(self, "GlueBucket",
-                            bucket_name=f's3-glue-test-{os.getenv("BUCKET_NAME")}',
+                            bucket_name=f's3-glue-test-{cdk.Aws.ACCOUNT_ID}-{cdk.Aws.REGION}',
                             versioned=False,
                             encryption=s3.BucketEncryption.S3_MANAGED,
                             removal_policy=RemovalPolicy.DESTROY,
@@ -39,59 +34,34 @@ class GlueLambdaStack(Stack):
         
         # Create glue database
         glue_database = glue.CfnDatabase(self, "GlueDatabase",
-                                         catalog_id=os.getenv("AWS_ACCOUNT_ID", " "),
+                                         catalog_id=cdk.Aws.ACCOUNT_ID,
                                          database_input=glue.CfnDatabase.DatabaseInputProperty(
                                              name="data-monitoring-database",
                                              description="Database for analysts to monitor data quality and schema changes.",
                                             )
                                         )
-        
-        # Create Glue Table to store the results
-        glue_table = glue.CfnTable(self, "GlueTable",
-                                   catalog_id=os.getenv("ACCOUNT_ID", " "),
-                                   database_name="data-monitoring-database",
-                                   table_input=glue.CfnTable.TableInputProperty(
-                                       name="data_monitoring_table",
-                                       description="Table to store row counts per database table.",
-                                       table_type="EXTERNAL_TABLE",
-                                       parameters={
-                                           "classification": "csv",
-                                           "skip.header.line.count": "1"
-                                        },
-                                        storage_descriptor=glue.CfnTable.StorageDescriptorProperty(
-                                            columns=[
-                                                glue.CfnTable.ColumnProperty(name="database_name", type="string"),
-                                                glue.CfnTable.ColumnProperty(name="table_name", type="string"),
-                                                glue.CfnTable.ColumnProperty(name="row_count", type="bigint"),
-                                                glue.CfnTable.ColumnProperty(name="last_updated", type="timestamp"),
-                                            ],
-                                            location=f's3://{result_bucket.bucket_name}/data-schema/',
-                                            input_format="org.apache.hadoop.mapred.TextInputFormat",
-                                            output_format="org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
-                                            serde_info=glue.CfnTable.SerdeInfoProperty(
-                                                serialization_library="org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
-                                                parameters={"field.delim": ","}
-                                            )
-                                        ),
-                                   )
-                                  )
-        
-        # Ensure the table is created after the database
-        glue_table.add_depends_on(glue_database)
 
         # Lambda layer providing awswrangler (or other libraries) to the function.
         wrangler_layer = _lambda.LayerVersion.from_layer_version_arn(self, "AwsWranglerLayer",
                                                                      layer_version_arn="arn:aws:lambda:ap-southeast-2:336392948345:layer:AWSSDKPandas-Python313-Arm64:4"
                                                                      )
         # Create the Lambda function that interacts with AWS Glue.
-        glue_lambda = _lambda.DockerImageFunction(self, "GlueLambdaFunction",
-                                                    function_name="GlueInteractionLambda",
-                                                    code=_lambda.DockerImageCode.from_image_asset("src"),
-                                                    timeout=Duration.seconds(300),
-                                                    memory_size=512,
-                                                    layers=[wrangler_layer],
-                                                    architecture=_lambda.Architecture.ARM_64,
-                                                    )
+        glue_lambda = _lambda.Function(self, "GlueLambdaFunction",
+                                       function_name="GlueLambdaFunction",
+                                       runtime=_lambda.Runtime.PYTHON_3_13,
+                                       handler="glue_lambda.handler",
+                                       code=_lambda.Code.from_asset("src/lambdas"),
+                                       timeout=Duration.minutes(5),
+                                       memory_size=512,
+                                       layers=[wrangler_layer],
+                                       environment={
+                                           "BUCKET_NAME": result_bucket.bucket_name,
+                                            "GLUE_DATABASE_NAME": glue_database.ref,
+                                           "REGION": cdk.Aws.REGION,
+                                           "ACCOUNT_ID": cdk.Aws.ACCOUNT_ID,
+                                       },
+                                        architecture=_lambda.Architecture.ARM_64
+                                       )
         
         # Grant the Lambda function read access to AWS Glue
         glue_lambda.add_to_role_policy(
@@ -101,35 +71,51 @@ class GlueLambdaStack(Stack):
                     "glue:GetDatabase",
                     "glue:GetTables",
                     "glue:GetTable",
-                ],
-                effect=iam.Effect.ALLOW,
-                resources=[
-                    f"arn:aws:glue:{os.getenv('REGION')}:{os.getenv('ACCOUNT_ID')}:catalog",
-                    f"arn:aws:glue:{os.getenv('REGION')}:{os.getenv('ACCOUNT_ID')}:database/*",
-                    f"arn:aws:glue:{os.getenv('REGION')}:{os.getenv('ACCOUNT_ID')}:table/*/*",
-                ]
-            )
-        )
-        
-        # Grant the Lambda function permissions to create/update/delete tables and databases in AWS Glue
-        glue_lambda.add_to_role_policy(
-            iam.PolicyStatement(
-                actions=[
-                    "glue:CreateTable",
-                    "glue:UpdateTable",
-                    "glue:DeleteTable",
                     "glue:CreateDatabase",
                     "glue:UpdateDatabase",
-                    "glue:DeleteDatabase",
+                    "glue:CreateTable",
+                    "glue:DeleteTable"
                 ],
                 effect=iam.Effect.ALLOW,
                 resources=[
-                    f"arn:aws:glue:{os.getenv('REGION')}:{os.getenv('ACCOUNT_ID')}:catalog",
-                    f"arn:aws:glue:{os.getenv('REGION')}:{os.getenv('ACCOUNT_ID')}:database/{glue_database.ref}",
-                    f"arn:aws:glue:{os.getenv('REGION')}:{os.getenv('ACCOUNT_ID')}:table/{glue_database.ref}/data_monitoring_table",
+                    f"arn:aws:glue:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:catalog",
+                    f"arn:aws:glue:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:database/*",
+                    f"arn:aws:glue:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:table/*/*",
                 ]
             )
         )
         
         # Grant the Lambda function read/write access to the S3 bucket
         result_bucket.grant_read_write(glue_lambda)
+
+        # Grant athena query permissions to the Lambda function
+        glue_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "athena:StartQueryExecution",
+                    "athena:GetQueryExecution",
+                    "athena:GetQueryResults",
+                    "athena:ListDatabases",
+                    "athena:ListTableMetadata",
+                    "athena:ListWorkGroups",
+                    "athena:GetWorkGroup"
+                ],
+                resources=[
+                    f"arn:aws:athena:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:workgroup/*"
+                ]
+            )
+        )
+
+        # Add a event rule to trigger the Lambda function every day at midnight UTC
+        rule = cdk.aws_events.Rule(self, "DailyGlueLambdaTrigger",
+                                   schedule=cdk.aws_events.Schedule.cron(minute="0", hour="0"),
+                                   targets=[cdk.aws_events_targets.LambdaFunction(glue_lambda)]
+                                   )
+
+        
+        # add permission for event rule to invoke the lambda function
+        glue_lambda.add_permission("AllowEventRuleInvoke",
+                                  principal=iam.ServicePrincipal("events.amazonaws.com"),
+                                  action="lambda:InvokeFunction",
+                                  source_arn=rule.rule_arn
+                                  )
