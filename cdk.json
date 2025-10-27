@@ -23,6 +23,12 @@
       "aws",
       "aws-cn"
     ],
+    "dev": {
+      "account_id": "123456789012",
+      "region": "us-west-2",
+      "max_runtime": 5,
+      "memory_size": 128
+    },
     "@aws-cdk-containers/ecs-service-extensions:enableDefaultLogDriver": true,
     "@aws-cdk/aws-ec2:uniqueImdsv2TemplateName": true,
     "@aws-cdk/aws-ecs:arnFormatIncludesClusterName": true,

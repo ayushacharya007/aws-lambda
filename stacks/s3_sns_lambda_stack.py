@@ -11,7 +11,7 @@ from aws_cdk import (
     aws_s3_notifications as s3n,
     aws_sqs as sqs,
 )
-
+import aws_cdk as cdk
 from constructs import Construct
 from typing import cast
 import os
@@ -42,7 +42,7 @@ class S3SnsLambdaStack(Stack):
 
         # Create the S3 bucket that will trigger notifications.
         bucket = s3.Bucket(self, "MyTestBucket",
-                           bucket_name=f's3-sns-test-{os.getenv("BUCKET_NAME")}',
+                           bucket_name=f's3-sns-test-{cdk.Aws.ACCOUNT_ID}-{cdk.Aws.REGION}',
                            versioned=False,
                            encryption=s3.BucketEncryption.S3_MANAGED,
                            removal_policy=RemovalPolicy.DESTROY,
