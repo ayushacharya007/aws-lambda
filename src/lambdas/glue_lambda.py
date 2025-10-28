@@ -22,16 +22,11 @@ def get_databases():
             for db in page.get('DatabaseList', []):
                 if (
                     db['Name'].endswith('_staging')
-                    or db['Name'] == 'data-monitoring-database'
-                    # the below databases have multiple issues
-                    or db['Name'] == 'ash_sunglass'
-                    or db['Name'] == 'kusuma_weather'
-                    or db['Name'] == 'sujal'
+                    or db['Name'] == 'data_monitoring_database'
                 ):
                     continue
                 # print(f"Found database: {db['Name']}")
                 databases.append(db['Name'])
-        print(f"Total databases found: {len(databases)}")
         return databases
     except Exception as e:
         print(f"Error retrieving databases: {e}")
@@ -44,7 +39,7 @@ def get_tables(database_name):
 
     Args:
         database_name (str): The name of the Glue database. 
-
+    
     Returns:
         list: A list of table names in the specified Glue database.
     """
@@ -59,8 +54,6 @@ def get_tables(database_name):
                     continue
                 # print(f"Found table: {table['Name']} in database: {database_name}")
                 tables.append(table['Name'])
-            # print(f"Total tables found in database {database_name}: {len(tables)}")
-        print(f"Total tables found: {len(tables)}")
         return tables
     except Exception as e:
         print(f"Error retrieving tables for database {database_name}: {e}")
@@ -85,27 +78,27 @@ def get_row_count(all_tables):
                 continue
 
             # print(f"Executing row count query for database: {db_name} with {len(tables)} tables...")
-            # sql_queries = []
+            sql_queries = []
             
             for table_name in tables:
-                # sql_queries.append(f"SELECT '{db_name}' AS database_name, '{table_name}' AS table_name, COUNT(*) AS row_count FROM {db_name}.{table_name}")
-                final_query = f"SELECT '{db_name}' AS database_name, '{table_name}' AS table_name, COUNT(*) AS row_count FROM {db_name}.{table_name}"
+                sql_queries.append(f"SELECT '{db_name}' AS database_name, '{table_name}' AS table_name, COUNT(*) AS row_count FROM {db_name}.{table_name}")
 
-                # final_query = " UNION ALL ".join(sql_queries)
-                # print(f"Query for table {table_name}\n: {final_query}")
-                try:
-                    df = wr.athena.read_sql_query(
-                        sql=final_query,
-                        database=db_name,
-                        workgroup='primary',
-                        s3_output=f"s3://aws-athena-query-results-{os.getenv('ACCOUNT_ID')}-{os.getenv('REGION')}/"
-                    )
-                    df['last_updated'] = pd.Timestamp.now()
-                    combined_df = pd.concat([combined_df, df], ignore_index=True)
-                except Exception as e:
-                    print(f"Error executing query for database {db_name}: {e}")
-                    # print(traceback.print_exc())
-                    continue
+            final_query = " UNION ALL ".join(sql_queries)
+            print(f"Query for database {db_name}\n: {final_query}")
+            try:
+                df = wr.athena.read_sql_query(
+                    sql=final_query,
+                    database=db_name,
+                    workgroup='primary',
+                    s3_output=f"s3://aws-athena-query-results-{os.getenv('ACCOUNT_ID')}-{os.getenv('REGION')}/"
+                )
+                df['last_updated'] = pd.Timestamp.now()
+                combined_df = pd.concat([combined_df, df], ignore_index=True)
+            except Exception as e:
+                print(f"Error executing query for database {db_name}: {e}")
+                # print(traceback.print_exc())
+                continue
+            
         print(f"Data:\n {combined_df.head()}")
         wr.s3.to_parquet(
             df=combined_df,
@@ -141,7 +134,7 @@ def handler(event, context):
         
         # print("Client created, listing databases and tables...")
         databases = get_databases()
-        # print("Successfully listed databases.")
+        print("Total databases retrieved:", len(databases))
         
         # print("Listing tables for each database...")
         all_tables = {}
@@ -149,7 +142,7 @@ def handler(event, context):
             tables = get_tables(db_name)
             all_tables[db_name] = tables
 
-        # print("Successfully listed tables for all databases.")
+        print(f"Total tables retrieved: {len(all_tables)}")
 
         # print("Getting row counts for all tables...")
         if len(all_tables) > 0:

@@ -35,7 +35,7 @@ class GlueLambdaStack(Stack):
         glue_database = glue.CfnDatabase(self, "GlueDatabase",
                                          catalog_id=cdk.Aws.ACCOUNT_ID,
                                          database_input=glue.CfnDatabase.DatabaseInputProperty(
-                                             name="data-monitoring-database",
+                                             name="data_monitoring_database",
                                              description="Database for analysts to monitor data quality and schema changes.",
                                             )
                                         )
