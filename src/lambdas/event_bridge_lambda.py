@@ -1,5 +1,4 @@
 import awswrangler as wr
-import json
 import os
 
 def handler(event, context):

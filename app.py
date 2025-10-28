@@ -9,16 +9,12 @@ from stacks.event_bridge_lambda_stack import EventBridgeLambdaStack
 from stacks.glue_lambda_stack import GlueLambdaStack
 
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 
 app = cdk.App()
 
 S3SqsLambdaStack(app, "S3LambdaStack")
 S3SnsLambdaStack(app, "S3SnsLambdaStack")
 EventBridgeLambdaStack(app, "EventBridgeLambdaStack")
-GlueLambdaStack(app, "GlueLambdaStack")
+GlueLambdaStack(app, "GlueLambdaStack", description="This stack collects row counts from Glue catalogs and stores them in a Glue table for data monitoring.")
 
 app.synth()

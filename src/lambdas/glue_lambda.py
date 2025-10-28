@@ -22,20 +22,20 @@ def get_databases():
             for db in page.get('DatabaseList', []):
                 if (
                     db['Name'].endswith('_staging')
+                    or db['Name'] == 'data-monitoring-database'
+                    # the below databases have multiple issues
                     or db['Name'] == 'ash_sunglass'
-                    or db["Name"] == "public_ash_sunglass"
-                    or db["Name"] == "sunglass_store_ash_sunglass"
-                    or db["Name"] == "sunglass_store_ash_sunglass_ash_sunglass"
-                    # db['Name'] != 'ayush'
+                    or db['Name'] == 'kusuma_weather'
+                    or db['Name'] == 'sujal'
                 ):
                     continue
                 # print(f"Found database: {db['Name']}")
                 databases.append(db['Name'])
-        # print(f"Total databases found: {len(databases)}")
+        print(f"Total databases found: {len(databases)}")
         return databases
     except Exception as e:
         print(f"Error retrieving databases: {e}")
-        print(traceback.print_exc())
+        # print(traceback.print_exc())
         return []
     
 
@@ -60,11 +60,12 @@ def get_tables(database_name):
                 # print(f"Found table: {table['Name']} in database: {database_name}")
                 tables.append(table['Name'])
             # print(f"Total tables found in database {database_name}: {len(tables)}")
+        print(f"Total tables found: {len(tables)}")
         return tables
     except Exception as e:
         print(f"Error retrieving tables for database {database_name}: {e}")
-        print(traceback.print_exc())
-
+        # print(traceback.print_exc())
+        return []
 
 def get_row_count(all_tables):
     """Function to execute Athena queries in batches and get row counts for all tables.
@@ -84,29 +85,31 @@ def get_row_count(all_tables):
                 continue
 
             # print(f"Executing row count query for database: {db_name} with {len(tables)} tables...")
-            sql_queries = []
+            # sql_queries = []
             
             for table_name in tables:
-                sql_queries.append(f"SELECT '{db_name}' AS database_name, '{table_name}' AS table_name, COUNT(*) AS row_count FROM {db_name}.{table_name}")
+                # sql_queries.append(f"SELECT '{db_name}' AS database_name, '{table_name}' AS table_name, COUNT(*) AS row_count FROM {db_name}.{table_name}")
+                final_query = f"SELECT '{db_name}' AS database_name, '{table_name}' AS table_name, COUNT(*) AS row_count FROM {db_name}.{table_name}"
 
-            final_query = " UNION ALL ".join(sql_queries)
-            print(f"Final Query for database {db_name}\n: {final_query}")
-            try:
-                df = wr.athena.read_sql_query(
-                    sql=final_query,
-                    database=db_name,
-                    workgroup='primary',
-                    s3_output=f"s3://aws-athena-query-results-{os.getenv('ACCOUNT_ID')}-{os.getenv('REGION')}/"
-                )
-                df['last_updated'] = pd.Timestamp.now()
-                combined_df = pd.concat([combined_df, df], ignore_index=True)
-            except Exception as e:
-                print(f"Error executing query for database {db_name}: {e}")
-                print(traceback.print_exc())
-                continue
+                # final_query = " UNION ALL ".join(sql_queries)
+                # print(f"Query for table {table_name}\n: {final_query}")
+                try:
+                    df = wr.athena.read_sql_query(
+                        sql=final_query,
+                        database=db_name,
+                        workgroup='primary',
+                        s3_output=f"s3://aws-athena-query-results-{os.getenv('ACCOUNT_ID')}-{os.getenv('REGION')}/"
+                    )
+                    df['last_updated'] = pd.Timestamp.now()
+                    combined_df = pd.concat([combined_df, df], ignore_index=True)
+                except Exception as e:
+                    print(f"Error executing query for database {db_name}: {e}")
+                    # print(traceback.print_exc())
+                    continue
+        print(f"Data:\n {combined_df.head()}")
         wr.s3.to_parquet(
             df=combined_df,
-            path=f"s3://{os.getenv('BUCKET_NAME')}/data-schema/data_monitoring.parquet",
+            path=f"s3://{os.getenv('BUCKET_NAME')}/data-schema/data-monitoring",
             index=False,
             dataset=True,
             mode='append',
@@ -117,9 +120,10 @@ def get_row_count(all_tables):
     except Exception as e:
         if not combined_df.empty:
             print("An error occurred, but partial results are available.")
+            print(f"Data:\n {combined_df.head()}")
             wr.s3.to_parquet(
                 df=combined_df,
-                path=f"s3://{os.getenv('BUCKET_NAME')}/data-schema/data-monitoring.parquet",
+                path=f"s3://{os.getenv('BUCKET_NAME')}/data-schema/data-monitoring",
                 index=False,
                 dataset=True,
                 mode='append',
@@ -127,7 +131,7 @@ def get_row_count(all_tables):
                 table="data_monitoring_table"
             )
         print(f"Error executing row count queries: {e}")
-        print(traceback.print_exc())
+        # print(traceback.print_exc())
 
 
 def handler(event, context):

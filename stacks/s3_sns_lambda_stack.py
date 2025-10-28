@@ -13,8 +13,6 @@ from aws_cdk import (
 )
 import aws_cdk as cdk
 from constructs import Construct
-from typing import cast
-import os
 
 class S3SnsLambdaStack(Stack):
     """CDK stack that wires S3 -> SNS -> Lambda for object processing.

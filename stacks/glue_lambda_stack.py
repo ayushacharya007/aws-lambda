@@ -50,8 +50,8 @@ class GlueLambdaStack(Stack):
                                        runtime=_lambda.Runtime.PYTHON_3_13,
                                        handler="glue_lambda.handler",
                                        code=_lambda.Code.from_asset("src/lambdas"),
-                                       timeout=Duration.minutes(5),
-                                       memory_size=512,
+                                       timeout=Duration.minutes(15),
+                                       memory_size=1024,
                                        layers=[wrangler_layer],
                                        environment={
                                            "BUCKET_NAME": result_bucket.bucket_name,
@@ -118,24 +118,13 @@ class GlueLambdaStack(Stack):
                     "s3:GetBucketLocation"
                 ],
                 resources=[
-                    f"arn:aws:s3:::aws-athena-query-results-{cdk.Aws.ACCOUNT_ID}-{cdk.Aws.REGION}",
-                    f"arn:aws:s3:::aws-athena-query-results-{cdk.Aws.ACCOUNT_ID}-{cdk.Aws.REGION}/*"
-                ]
-            )
-        )
-        
-        
-        glue_lambda.add_to_role_policy(
-            iam.PolicyStatement(
-                actions=[
-                    "s3:GetObject",
-                ],
-                resources=[
                     "arn:aws:s3:::*",
                     "arn:aws:s3:::*/*"
                 ]
             )
         )
+        
+
         
         # Grant the Lambda function read/write access to the result bucket
         result_bucket.grant_read_write(glue_lambda)

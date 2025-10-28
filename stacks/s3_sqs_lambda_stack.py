@@ -10,9 +10,7 @@ from aws_cdk import (
     aws_sqs as sqs,
 )
 from constructs import Construct
-import os
-from typing import cast
-
+import aws_cdk as cdk
 
 class S3SqsLambdaStack(Stack):
     """CDK stack that wires S3 -> SQS -> Lambda for object processing.
@@ -46,7 +44,7 @@ class S3SqsLambdaStack(Stack):
 
         # Create the S3 bucket that will trigger notifications.
         bucket = s3.Bucket(self, "MyTestBucket",
-                           bucket_name=f's3-sqs-test-{os.getenv("BUCKET_NAME")}',
+                           bucket_name=f's3-sqs-test-{cdk.Aws.ACCOUNT_ID}-{cdk.Aws.REGION}',
                            encryption=s3.BucketEncryption.S3_MANAGED,
                            removal_policy=RemovalPolicy.DESTROY,
                            auto_delete_objects=True,
