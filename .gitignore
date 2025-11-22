@@ -3,7 +3,6 @@ package-lock.json
 __pycache__
 .pytest_cache
 *.egg-info
-.DS_Store
 
 # CDK asset staging directory
 .cdk.staging
@@ -12,6 +11,6 @@ cdk.out
 notebooks/
 json/
 venv/
+.venv/
 .DS_Store
-central_stack.py
 sql/

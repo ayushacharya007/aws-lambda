@@ -4,14 +4,10 @@ This project demonstrates various patterns for processing S3 events using AWS La
 
 ## Architecture Overview
 
-The project is structured around a **BaseStack** that provides shared resources to other feature-specific stacks. This promotes resource reuse and cleaner architecture.
-
-### Shared Resources (`BaseStack`)
-- **Glue Database**: A shared Glue Catalog Database (`shared_data_monitoring_db`) for data monitoring.
-- **Glue Result Bucket**: A shared S3 bucket for storing query results and Glue data.
-- **Lambda Layer**: A shared AWS Wrangler (Pandas) Lambda Layer for data processing capabilities.
+The project consists of independent feature stacks that demonstrate specific AWS integration patterns. Each stack creates its own necessary resources (S3 buckets, queues, topics) to function autonomously, while referencing shared configuration (like Lambda Layers) via environment variables.
 
 ### Feature Stacks
+
 1.  **S3SqsLambdaStack**:
     -   **Flow**: S3 Upload -> SQS Queue -> Lambda Function.
     -   **Use Case**: Buffered processing of file uploads.
@@ -30,14 +26,15 @@ The project is structured around a **BaseStack** that provides shared resources 
 4.  **GlueLambdaStack**:
     -   **Flow**: Scheduled Event / Direct Invoke -> Lambda -> AWS Glue/Athena.
     -   **Use Case**: Data quality checks, schema monitoring, and running Athena queries.
-    -   **Resources**: Uses shared Glue DB and Result Bucket.
+    -   **Resources**: Dedicated S3 Bucket, Glue Database, Lambda.
 
 ## Prerequisites
 
--   **Python**: 3.13 or later.
+-   **Python**: 3.12 or later.
 -   **Node.js**: Version 22 (Compatible with AWS CDK).
 -   **AWS CDK CLI**: Installed globally (`npm install -g aws-cdk`).
 -   **AWS CLI**: Configured with appropriate credentials.
+-   **uv**: For dependency management (recommended).
 
 ## Setup & Installation
 
@@ -47,18 +44,15 @@ The project is structured around a **BaseStack** that provides shared resources 
     cd s3_lambda
     ```
 
-2.  **Create and activate a virtual environment**:
+2.  **Environment Setup**:
+    This project is part of a workspace managed by `uv`.
     ```bash
-    python3 -m venv venv
-    source venv/bin/activate
+    # From the root of the repo
+    uv sync
+    source .venv/bin/activate
     ```
 
-3.  **Install dependencies**:
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-4.  **Configure Environment Variables**:
+3.  **Configure Environment Variables**:
     Create a `.env` file in the project root with the following variables:
     ```ini
     ACCOUNT_ID=<your-aws-account-id>
@@ -79,8 +73,8 @@ The project is structured around a **BaseStack** that provides shared resources 
     ```
     Or deploy specific stacks:
     ```bash
-    cdk deploy BaseStack
-    cdk deploy S3LambdaStack
+    cdk deploy S3SqsLambdaStack
+    cdk deploy S3SnsLambdaStack
     ```
 
 ## Useful Commands
@@ -95,9 +89,8 @@ The project is structured around a **BaseStack** that provides shared resources 
 
 -   `app.py`: Entry point of the CDK application.
 -   `stacks/`: Contains CDK stack definitions.
-    -   `base_stack.py`: Shared resources.
     -   `s3_sqs_lambda_stack.py`: S3-SQS pattern.
     -   `s3_sns_lambda_stack.py`: S3-SNS pattern.
     -   `event_bridge_lambda_stack.py`: EventBridge pattern.
-    -   `glue_lambda_stack.py`: Glue integration.
+    -   `data_scheme_stack.py`: Glue integration.
 -   `src/lambdas/`: Python source code for Lambda functions.
