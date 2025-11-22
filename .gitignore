@@ -11,6 +11,6 @@ cdk.out
 notebooks/
 json/
 venv/
+.venv/
 .DS_Store
-central_stack.py
 sql/
