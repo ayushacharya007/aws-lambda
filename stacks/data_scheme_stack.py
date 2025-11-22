@@ -9,41 +9,28 @@ from aws_cdk import (
 )
 import aws_cdk as cdk
 from constructs import Construct
+from .base_stack import BaseStack
 
 class GlueLambdaStack(Stack):
     """CDK stack that creates a Lambda function to interact with AWS Glue.
 
-    - Creates a Lambda function (with awswrangler layer) that can interact
+    - Creates a Lambda function (with shared awswrangler layer) that can interact
       with AWS Glue.
+    - Uses shared Glue Database and S3 Bucket from BaseStack.
     """
 
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+    def __init__(self, scope: Construct, construct_id: str, base_stack: BaseStack, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         
-        # Create an S3 bucket to store Glue-related data
-        result_bucket = s3.Bucket(self, "GlueBucket",
-                            bucket_name=f's3-glue-test-{cdk.Aws.ACCOUNT_ID}-{cdk.Aws.REGION}',
-                            versioned=False,
-                            encryption=s3.BucketEncryption.S3_MANAGED,
-                            removal_policy=RemovalPolicy.DESTROY,
-                            auto_delete_objects=True,
-                            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
-                            enforce_ssl=True
-                            )
+        # Use Shared Glue Result Bucket from BaseStack
+        result_bucket = base_stack.glue_result_bucket
         
-        # Create glue database
-        glue_database = glue.CfnDatabase(self, "GlueDatabase",
-                                         catalog_id=cdk.Aws.ACCOUNT_ID,
-                                         database_input=glue.CfnDatabase.DatabaseInputProperty(
-                                             name="data_monitoring_database",
-                                             description="Database for analysts to monitor data quality and schema changes.",
-                                            )
-                                        )
+        # Use Shared Glue Database from BaseStack
+        glue_database = base_stack.glue_database
 
-        # Lambda layer providing awswrangler (or other libraries) to the function.
-        wrangler_layer = _lambda.LayerVersion.from_layer_version_arn(self, "AwsWranglerLayer",
-                                                                     layer_version_arn="arn:aws:lambda:ap-southeast-2:336392948345:layer:AWSSDKPandas-Python313-Arm64:4"
-                                                                     )
+        # Use Shared Wrangler Layer from BaseStack
+        wrangler_layer = base_stack.wrangler_layer
+
         # Create the Lambda function that interacts with AWS Glue.
         glue_lambda = _lambda.Function(self, "GlueLambdaFunction",
                                        function_name="GlueLambdaFunction",
@@ -55,7 +42,7 @@ class GlueLambdaStack(Stack):
                                        layers=[wrangler_layer],
                                        environment={
                                            "BUCKET_NAME": result_bucket.bucket_name,
-                                            "GLUE_DATABASE_NAME": glue_database.ref,
+                                           "GLUE_DATABASE_NAME": glue_database.ref,
                                            "REGION": cdk.Aws.REGION,
                                            "ACCOUNT_ID": cdk.Aws.ACCOUNT_ID,
                                        },
@@ -123,8 +110,6 @@ class GlueLambdaStack(Stack):
                 ]
             )
         )
-        
-
         
         # Grant the Lambda function read/write access to the result bucket
         result_bucket.grant_read_write(glue_lambda)

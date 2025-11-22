@@ -1,58 +1,103 @@
+# AWS CDK S3 Lambda Project
 
-# Welcome to your CDK Python project!
+This project demonstrates various patterns for processing S3 events using AWS Lambda, orchestrated via AWS CDK (Cloud Development Kit) in Python. It showcases integrations with SQS, SNS, EventBridge, and AWS Glue.
 
-This is a blank project for CDK development with Python.
+## Architecture Overview
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+The project is structured around a **BaseStack** that provides shared resources to other feature-specific stacks. This promotes resource reuse and cleaner architecture.
 
-This project is set up like a standard Python project.  The initialization
-process also creates a virtualenv within this project, stored under the `.venv`
-directory.  To create the virtualenv it assumes that there is a `python3`
-(or `python` for Windows) executable in your path with access to the `venv`
-package. If for any reason the automatic creation of the virtualenv fails,
-you can create the virtualenv manually.
+### Shared Resources (`BaseStack`)
+- **Glue Database**: A shared Glue Catalog Database (`shared_data_monitoring_db`) for data monitoring.
+- **Glue Result Bucket**: A shared S3 bucket for storing query results and Glue data.
+- **Lambda Layer**: A shared AWS Wrangler (Pandas) Lambda Layer for data processing capabilities.
 
-To manually create a virtualenv on MacOS and Linux:
+### Feature Stacks
+1.  **S3SqsLambdaStack**:
+    -   **Flow**: S3 Upload -> SQS Queue -> Lambda Function.
+    -   **Use Case**: Buffered processing of file uploads.
+    -   **Resources**: Dedicated S3 Bucket, SQS Queue, DLQ, Lambda.
 
-```
-$ python3 -m venv .venv
-```
+2.  **S3SnsLambdaStack**:
+    -   **Flow**: S3 Upload -> SNS Topic -> Lambda Function.
+    -   **Use Case**: Fan-out architecture or immediate notification processing.
+    -   **Resources**: Dedicated S3 Bucket, SNS Topic, Lambda.
 
-After the init process completes and the virtualenv is created, you can use the following
-step to activate your virtualenv.
+3.  **EventBridgeLambdaStack**:
+    -   **Flow**: S3 Upload -> EventBridge Rule -> Lambda Function.
+    -   **Use Case**: Event-driven architecture with complex filtering rules.
+    -   **Resources**: Dedicated S3 Bucket (Source & Destination), EventBridge Rule, Lambda.
 
-```
-$ source .venv/bin/activate
-```
+4.  **GlueLambdaStack**:
+    -   **Flow**: Scheduled Event / Direct Invoke -> Lambda -> AWS Glue/Athena.
+    -   **Use Case**: Data quality checks, schema monitoring, and running Athena queries.
+    -   **Resources**: Uses shared Glue DB and Result Bucket.
 
-If you are a Windows platform, you would activate the virtualenv like this:
+## Prerequisites
 
-```
-% .venv\Scripts\activate.bat
-```
+-   **Python**: 3.13 or later.
+-   **Node.js**: Version 22 (Compatible with AWS CDK).
+-   **AWS CDK CLI**: Installed globally (`npm install -g aws-cdk`).
+-   **AWS CLI**: Configured with appropriate credentials.
 
-Once the virtualenv is activated, you can install the required dependencies.
+## Setup & Installation
 
-```
-$ pip install -r requirements.txt
-```
+1.  **Clone the repository**:
+    ```bash
+    git clone <repository-url>
+    cd s3_lambda
+    ```
 
-At this point you can now synthesize the CloudFormation template for this code.
+2.  **Create and activate a virtual environment**:
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    ```
 
-```
-$ cdk synth
-```
+3.  **Install dependencies**:
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-To add additional dependencies, for example other CDK libraries, just add
-them to your `setup.py` file and rerun the `pip install -r requirements.txt`
-command.
+4.  **Configure Environment Variables**:
+    Create a `.env` file in the project root with the following variables:
+    ```ini
+    ACCOUNT_ID=<your-aws-account-id>
+    REGION=<your-aws-region>
+    LAMBDA_LAYER_ARN=<arn-of-aws-wrangler-layer>
+    ```
 
-## Useful commands
+## Deployment
 
- * `cdk ls`          list all stacks in the app
- * `cdk synth`       emits the synthesized CloudFormation template
- * `cdk deploy`      deploy this stack to your default AWS account/region
- * `cdk diff`        compare deployed stack with current state
- * `cdk docs`        open CDK documentation
+1.  **Synthesize the CloudFormation templates**:
+    ```bash
+    cdk synth
+    ```
 
-Enjoy!
+2.  **Deploy all stacks**:
+    ```bash
+    cdk deploy --all
+    ```
+    Or deploy specific stacks:
+    ```bash
+    cdk deploy BaseStack
+    cdk deploy S3LambdaStack
+    ```
+
+## Useful Commands
+
+-   `cdk ls`: List all stacks in the app.
+-   `cdk synth`: Emits the synthesized CloudFormation template.
+-   `cdk deploy`: Deploy this stack to your default AWS account/region.
+-   `cdk diff`: Compare deployed stack with current state.
+-   `cdk docs`: Open CDK documentation.
+
+## Project Structure
+
+-   `app.py`: Entry point of the CDK application.
+-   `stacks/`: Contains CDK stack definitions.
+    -   `base_stack.py`: Shared resources.
+    -   `s3_sqs_lambda_stack.py`: S3-SQS pattern.
+    -   `s3_sns_lambda_stack.py`: S3-SNS pattern.
+    -   `event_bridge_lambda_stack.py`: EventBridge pattern.
+    -   `glue_lambda_stack.py`: Glue integration.
+-   `src/lambdas/`: Python source code for Lambda functions.
