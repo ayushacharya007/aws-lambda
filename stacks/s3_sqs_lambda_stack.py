@@ -11,18 +11,18 @@ from aws_cdk import (
 )
 from constructs import Construct
 import aws_cdk as cdk
+from .base_stack import BaseStack
 
 class S3SqsLambdaStack(Stack):
     """CDK stack that wires S3 -> SQS -> Lambda for object processing.
 
-    - Creates an S3 bucket with server-side encryption, versioning and
-      automatic object deletion on stack destroy (for dev/test).
+    - Uses shared S3 bucket from BaseStack.
     - Creates an SQS queue to receive S3 notifications.
-    - Creates a Lambda function (with awswrangler layer) that consumes messages
+    - Creates a Lambda function (with shared awswrangler layer) that consumes messages
       from the queue and has read/write access to the bucket.
     """
 
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+    def __init__(self, scope: Construct, construct_id: str, base_stack: BaseStack, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         # Create a dead letter queue for failed messages
@@ -66,10 +66,8 @@ class S3SqsLambdaStack(Stack):
                                    destination_key_prefix="Raw"
                                    )
 
-        # Lambda layer providing awswrangler (or other libraries) to the function.
-        wrangler_layer = _lambda.LayerVersion.from_layer_version_arn(self, "AwsWranglerLayer",
-                                                                     layer_version_arn="arn:aws:lambda:ap-southeast-2:336392948345:layer:AWSSDKPandas-Python313-Arm64:4"
-                                                                     )
+        # Use Shared Wrangler Layer from BaseStack
+        wrangler_layer = base_stack.wrangler_layer
 
         # Lambda function that will process S3 object events.
         transform_fn = _lambda.Function(self, "FileTransformLambda",
