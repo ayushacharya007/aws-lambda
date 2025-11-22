@@ -39,11 +39,11 @@ class BaseStack(Stack):
         
 
         # Shared Glue Database
-        self.glue_database = glue.CfnDatabase(self, "SharedGlueDatabase",
+        self.glue_database = glue.CfnDatabase(self, "GlueDatabase",
             catalog_id=cdk.Aws.ACCOUNT_ID,
             database_input=glue.CfnDatabase.DatabaseInputProperty(
-                name="shared_data_monitoring_db",
-                description="Shared database for data monitoring and quality checks.",
+                name="data_monitoring_db",
+                description="Database for data monitoring and quality checks.",
             )
         )
 
